@@ -1,6 +1,7 @@
 use anyhow::Result;
 use embed_anything::embed_query;
 use embed_anything::embeddings::embed::{Embedder, EmbedderBuilder};
+use embed_anything::embeddings::local::model2vec::Model2VecEmbedder;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Interaction {
@@ -35,11 +36,13 @@ pub struct UserPreferenceCalculator {
 }
 
 impl UserPreferenceCalculator {
-    /// Loads the `minishlab/potion-base-8M` model for embedding.
     pub fn new() -> Result<Self> {
-        let model = EmbedderBuilder::new()
-            .model_id(Some("minishlab/potion-base-8M"))
-            .from_pretrained_hf()?;
+        let model = Model2VecEmbedder::new("../model", None, None)?;
+
+        let model = Embedder::Text(embed_anything::embeddings::embed::TextEmbedder::Model2Vec(
+            model.into(),
+        ));
+
         Ok(Self { model })
     }
 
