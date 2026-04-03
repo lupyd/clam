@@ -53,8 +53,11 @@ async fn test_preference_change_over_time() -> Result<()> {
 
     // Persistent Calculator: half life of 1 second for fast test simulation
     let half_life_secs = 1.0;
+    let sqlite_pool = sqlx::sqlite::SqlitePoolOptions::new()
+        .connect("sqlite::memory:")
+        .await?;
     let persist_calc =
-        PersistentPreferenceCalculator::new("sqlite::memory:", embedder, half_life_secs).await?;
+        PersistentPreferenceCalculator::new(sqlite_pool, embedder, half_life_secs).await?;
 
     // 3. Simple Mock Posts Collection
     let mut posts = Vec::new();

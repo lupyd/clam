@@ -2,7 +2,7 @@ use anyhow::Result;
 use chrono::{DateTime, Utc};
 use embed_anything::embed_query;
 use embed_anything::embeddings::embed::Embedder;
-use sqlx::{Pool, Sqlite, sqlite::SqlitePoolOptions};
+use sqlx::{Pool, Sqlite};
 
 use crate::{Interaction, Post};
 
@@ -16,11 +16,9 @@ pub struct PersistentPreferenceCalculator {
 impl PersistentPreferenceCalculator {
     /// Creates a new persistent user preference calculator.
     ///
-    /// `db_url` should be a standard SQLite connection string (e.g. `sqlite::memory:` or `sqlite://preferences.db`)
+    /// `pool` should be a connected SQLite pool.
     /// `half_life_secs` defines the halflife for interaction decay (e.g. 86400.0 for 1 day).
-    pub async fn new(db_url: &str, model: Embedder, half_life_secs: f64) -> Result<Self> {
-        let pool = SqlitePoolOptions::new().connect(db_url).await?;
-
+    pub async fn new(pool: Pool<Sqlite>, model: Embedder, half_life_secs: f64) -> Result<Self> {
         // Initialize table
         sqlx::query(
             r#"
@@ -40,6 +38,16 @@ impl PersistentPreferenceCalculator {
             model,
             half_life_secs,
         })
+    }
+
+    /// Creates a new persistent user preference calculator by loading the model from path.
+    pub async fn new_with_path(pool: Pool<Sqlite>, model_path: &str, half_life_secs: f64) -> Result<Self> {
+        let model = embed_anything::embeddings::local::model2vec::Model2VecEmbedder::new(model_path, None, None)
+            .map_err(|e| anyhow::anyhow!("Failed to initialize model: {}", e))?;
+        let embedder = Embedder::Text(embed_anything::embeddings::embed::TextEmbedder::Model2Vec(
+            model.into(),
+        ));
+        Self::new(pool, embedder, half_life_secs).await
     }
 
     /// Fetches the user's current preference vector
@@ -159,8 +167,10 @@ mod tests {
         ));
 
         // Use in-memory SQLite DB
-        let calc =
-            PersistentPreferenceCalculator::new("sqlite::memory:", embedder, 86400.0).await?;
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .connect("sqlite::memory:")
+            .await?;
+        let calc = PersistentPreferenceCalculator::new(pool, embedder, 86400.0).await?;
 
         let post1 = Post {
             id: "1".into(),
