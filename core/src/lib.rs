@@ -1,6 +1,6 @@
 use anyhow::Result;
 use embed_anything::embed_query;
-use embed_anything::embeddings::embed::{Embedder, EmbedderBuilder};
+use embed_anything::embeddings::embed::Embedder;
 use embed_anything::embeddings::local::model2vec::Model2VecEmbedder;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -36,8 +36,8 @@ pub struct UserPreferenceCalculator {
 }
 
 impl UserPreferenceCalculator {
-    pub fn new() -> Result<Self> {
-        let model = Model2VecEmbedder::new("../model", None, None)?;
+    pub fn new(model_path: &str) -> Result<Self> {
+        let model = Model2VecEmbedder::new(model_path, None, None)?;
 
         let model = Embedder::Text(embed_anything::embeddings::embed::TextEmbedder::Model2Vec(
             model.into(),
@@ -103,13 +103,15 @@ mod tests {
 
     #[test]
     fn test_calculator_initialization() {
-        let calc = UserPreferenceCalculator::new();
+        let model_path = std::env::var("MODEL_PATH").expect("MODEL_PATH env var is not set");
+        let calc = UserPreferenceCalculator::new(&model_path);
         assert!(calc.is_ok());
     }
 
     #[tokio::test]
     async fn test_preference_calculation() -> Result<()> {
-        let calc = UserPreferenceCalculator::new()?;
+        let model_path = std::env::var("MODEL_PATH").expect("MODEL_PATH env var is not set");
+        let calc = UserPreferenceCalculator::new(&model_path)?;
 
         let post1 = Post {
             id: "1".into(),
@@ -126,6 +128,7 @@ mod tests {
 
         let result = calc.calculate_preference_vector(&interactions).await?;
 
+        eprintln!("{:?}", result);
         assert!(result.is_some());
         let vector = result.unwrap();
 
@@ -145,7 +148,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_empty_interactions() -> Result<()> {
-        let calc = UserPreferenceCalculator::new()?;
+        let model_path = std::env::var("MODEL_PATH").expect("MODEL_PATH env var is not set");
+        let calc = UserPreferenceCalculator::new(&model_path)?;
         assert!(calc.calculate_preference_vector(&[]).await?.is_none());
         Ok(())
     }

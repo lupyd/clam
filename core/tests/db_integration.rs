@@ -34,7 +34,8 @@ async fn test_database_integration() -> Result<()> {
     .await?;
 
     // 2. Load Embedder
-    let calc = UserPreferenceCalculator::new()?;
+    let model_path = std::env::var("MODEL_PATH").expect("MODEL_PATH env var is not set");
+    let calc = UserPreferenceCalculator::new(&model_path)?;
 
     // 3. Fetch Open Source Dataset (AG News - Test Set)
     println!("Downloading dataset...");
