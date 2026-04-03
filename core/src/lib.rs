@@ -1,3 +1,5 @@
+pub mod persistent_calc;
+
 use anyhow::Result;
 use embed_anything::embed_query;
 use embed_anything::embeddings::embed::Embedder;
