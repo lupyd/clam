@@ -2,8 +2,7 @@ use anyhow::Result;
 use clam_core::{
     Interaction, Post, UserPreferenceCalculator, persistent_calc::PersistentPreferenceCalculator,
 };
-use embed_anything::embeddings::embed::Embedder;
-use embed_anything::embeddings::local::model2vec::Model2VecEmbedder;
+use model2vec_rs::model::StaticModel;
 use sqlx::postgres::PgPoolOptions;
 use std::time::Duration;
 use uuid::Uuid;
@@ -46,10 +45,7 @@ async fn test_preference_change_over_time() -> Result<()> {
     // 2. Setup Embedders and Calcs
     let simple_calc = UserPreferenceCalculator::new(&model_path)?; // For pre-filling
 
-    let m2v = Model2VecEmbedder::new(&model_path, None, None)?;
-    let embedder = Embedder::Text(embed_anything::embeddings::embed::TextEmbedder::Model2Vec(
-        m2v.into(),
-    ));
+    let model = StaticModel::from_pretrained(&model_path, None, None, None)?;
 
     // Persistent Calculator: half life of 1 second for fast test simulation
     let half_life_secs = 1.0;
@@ -57,7 +53,7 @@ async fn test_preference_change_over_time() -> Result<()> {
         .connect("sqlite::memory:")
         .await?;
     let persist_calc =
-        PersistentPreferenceCalculator::new(sqlite_pool, embedder, half_life_secs).await?;
+        PersistentPreferenceCalculator::new(sqlite_pool, model, half_life_secs).await?;
 
     // 3. Simple Mock Posts Collection
     let mut posts = Vec::new();

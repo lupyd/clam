@@ -1,9 +1,7 @@
 pub mod persistent_calc;
 
 use anyhow::Result;
-use embed_anything::embed_query;
-use embed_anything::embeddings::embed::Embedder;
-use embed_anything::embeddings::local::model2vec::Model2VecEmbedder;
+use model2vec_rs::model::StaticModel;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Interaction {
@@ -34,16 +32,12 @@ pub struct Post {
 }
 
 pub struct UserPreferenceCalculator {
-    model: Embedder,
+    model: StaticModel,
 }
 
 impl UserPreferenceCalculator {
     pub fn new(model_path: &str) -> Result<Self> {
-        let model = Model2VecEmbedder::new(model_path, None, None)?;
-
-        let model = Embedder::Text(embed_anything::embeddings::embed::TextEmbedder::Model2Vec(
-            model.into(),
-        ));
+        let model = StaticModel::from_pretrained(model_path, None, None, None)?;
 
         Ok(Self { model })
     }
@@ -64,14 +58,13 @@ impl UserPreferenceCalculator {
             .collect();
 
         // Generate embeddings for all posts in a batch
-        let text_refs: Vec<&str> = texts.iter().map(|s| s.as_str()).collect();
-        let embeddings = embed_query(&text_refs, &self.model, None).await?;
+        let embeddings = self.model.encode(&texts);
 
         if embeddings.is_empty() {
             return Ok(None);
         }
 
-        let dim = embeddings[0].embedding.to_dense()?.len();
+        let dim = embeddings[0].len();
 
         if dim == 0 {
             return Ok(None);
@@ -82,8 +75,7 @@ impl UserPreferenceCalculator {
 
         for (embedding, (_, interaction)) in embeddings.iter().zip(interactions.iter()) {
             let weight = interaction.weight();
-            let emb_vec = embedding.embedding.to_dense()?;
-            for (i, &val) in emb_vec.iter().enumerate() {
+            for (i, &val) in embedding.iter().enumerate() {
                 result[i] += val * weight;
             }
             total_absolute_weight += weight.abs();

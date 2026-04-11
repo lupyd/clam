@@ -1,14 +1,13 @@
 use anyhow::Result;
 use chrono::{DateTime, Utc};
-use embed_anything::embed_query;
-use embed_anything::embeddings::embed::Embedder;
+use model2vec_rs::model::StaticModel;
 use sqlx::{Pool, Sqlite};
 
 use crate::{Interaction, Post};
 
 pub struct PersistentPreferenceCalculator {
     pool: Pool<Sqlite>,
-    model: Embedder,
+    model: StaticModel,
     // decay half-life in seconds
     half_life_secs: f64,
 }
@@ -18,7 +17,7 @@ impl PersistentPreferenceCalculator {
     ///
     /// `pool` should be a connected SQLite pool.
     /// `half_life_secs` defines the halflife for interaction decay (e.g. 86400.0 for 1 day).
-    pub async fn new(pool: Pool<Sqlite>, model: Embedder, half_life_secs: f64) -> Result<Self> {
+    pub async fn new(pool: Pool<Sqlite>, model: StaticModel, half_life_secs: f64) -> Result<Self> {
         // Initialize table
         sqlx::query(
             r#"
@@ -42,12 +41,8 @@ impl PersistentPreferenceCalculator {
 
     /// Creates a new persistent user preference calculator by loading the model from path.
     pub async fn new_with_path(pool: Pool<Sqlite>, model_path: &str, half_life_secs: f64) -> Result<Self> {
-        let model = embed_anything::embeddings::local::model2vec::Model2VecEmbedder::new(model_path, None, None)
-            .map_err(|e| anyhow::anyhow!("Failed to initialize model: {}", e))?;
-        let embedder = Embedder::Text(embed_anything::embeddings::embed::TextEmbedder::Model2Vec(
-            model.into(),
-        ));
-        Self::new(pool, embedder, half_life_secs).await
+        let model = StaticModel::from_pretrained(model_path, None, None, None)?;
+        Self::new(pool, model, half_life_secs).await
     }
 
     /// Fetches the user's current preference vector
@@ -80,14 +75,13 @@ impl PersistentPreferenceCalculator {
     ) -> Result<()> {
         let now = Utc::now();
         let texts = vec![format!("{}\n{}", post.title, post.body)];
-        let text_refs: Vec<&str> = texts.iter().map(|s| s.as_str()).collect();
-        let embeddings = embed_query(&text_refs, &self.model, None).await?;
+        let embeddings = self.model.encode(&texts);
 
         if embeddings.is_empty() {
             return Ok(());
         }
 
-        let incoming_vec = embeddings[0].embedding.to_dense()?;
+        let incoming_vec = &embeddings[0];
         let weight = interaction.weight();
 
         let row: Option<(String, f64, DateTime<Utc>)> = sqlx::query_as(
@@ -156,21 +150,16 @@ impl PersistentPreferenceCalculator {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use embed_anything::embeddings::local::model2vec::Model2VecEmbedder;
-
     #[tokio::test]
     async fn test_persistent_calculator() -> Result<()> {
         let model_path = std::env::var("MODEL_PATH").expect("MODEL_PATH env var is not set");
-        let model = Model2VecEmbedder::new(&model_path, None, None)?;
-        let embedder = Embedder::Text(embed_anything::embeddings::embed::TextEmbedder::Model2Vec(
-            model.into(),
-        ));
+        let model = StaticModel::from_pretrained(&model_path, None, None, None)?;
 
         // Use in-memory SQLite DB
         let pool = sqlx::sqlite::SqlitePoolOptions::new()
             .connect("sqlite::memory:")
             .await?;
-        let calc = PersistentPreferenceCalculator::new(pool, embedder, 86400.0).await?;
+        let calc = PersistentPreferenceCalculator::new(pool, model, 86400.0).await?;
 
         let post1 = Post {
             id: "1".into(),
