@@ -21,7 +21,7 @@ serde_json = "1.0"
 chrono = { version = "0.4.39", features = ["serde"] }
 
 # Machine Learning
-model2vec-rs = { git = "https://github.com/MinishLab/model2vec-rs", version = "0.1.4", features = ["local-only"] }
+model2vec-rs = { version = "0.2.0", features = ["local-only"] }
 
 [dev-dependencies]
 # Data processing for tests
